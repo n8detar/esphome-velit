@@ -28,7 +28,7 @@ ESPHome external component for controlling Velit air conditioners and heaters ov
 external_components:
   - source:
       type: git
-      url: https://github.com/your-user/velit-esphome
+      url: https://github.com/n8detar/esphome-velit
 ```
 
 ### From a local checkout
