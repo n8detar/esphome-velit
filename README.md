@@ -6,6 +6,7 @@ ESPHome external component for controlling Velit air conditioners and heaters ov
 
 - BLE access is effectively exclusive. While ESPHome is connected to the heater or AC, the Velit Android app will not be able to connect. The reverse is also true: if the Android app is connected, ESPHome will not be able to connect.
 - The examples below include a `ble_client` switch so you can disconnect ESPHome from the device before using the Android app, then reconnect it afterward.
+- OTA and Wi-Fi provisioning are out of scope for this project and will never be added.
 
 ## Features
 
@@ -146,5 +147,11 @@ number:
 - ESP32 only
 - Fixed BLE MAC binding only
 - AC vendor submodes such as `sleep`, `eco`, `auto`, `turbo`, and `vent` are not exposed in v1
-- Heater timer programming, dashboard diagnostics, OTA, and Wi-Fi provisioning are not exposed in v1
+- Heater timer programming and dashboard diagnostics are not exposed in v1
+- OTA and Wi-Fi provisioning will not be added
 - Heater clock sync is best effort and only works when the ESPHome node already has valid system time
+
+## To Do
+
+- Future release: if technically possible, log discovered Velit BLE MAC addresses during BLE scans so users can identify the correct device to bind with a fixed `ble_client` MAC.
+- Future release: if the protocol mapping is reliable enough, expose AC vendor submodes such as `sleep`, `eco`, `auto`, `turbo`, and `vent` as climate presets.
