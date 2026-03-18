@@ -37,7 +37,7 @@ external_components:
 external_components:
   - source:
       type: local
-      path: /config/esphome/your-repo-name/components
+      path: /config/esphome/esphome-velit/components
 ```
 
 ## AC Example
