@@ -1,12 +1,13 @@
 # Velit ESPHome External Component
 
-ESPHome external component for controlling Velit air conditioners and heaters over BLE using the same protocol found in Velit's Android app. This was vibe coded and exists as is. Use at your own risk.
+Unofficial ESPHome external component for controlling Velit air conditioners and heaters over BLE using the protocol used by Velit's Android app. It adds a shared `velit:` BLE hub plus climate, sensor, text sensor, select, number, and switch entities for supported Velit devices.
 
 ## Important Notes
 
-- BLE access is effectively exclusive. While ESPHome is connected to the heater or AC, the Velit Android app will not be able to connect. The reverse is also true: if the Android app is connected, ESPHome will not be able to connect.
-- The examples below include a `ble_client` switch so you can disconnect ESPHome from the device before using the Android app, then reconnect it afterward.
-- OTA and Wi-Fi provisioning are out of scope for this project and will never be added.
+- This is an unofficial, reverse-engineered project. It was vibe coded, is provided as-is, and should be used at your own risk.
+- BLE access is effectively exclusive. While ESPHome is connected to the heater or AC, the Velit Android app cannot connect. The reverse is also true: if the Android app is connected, ESPHome cannot connect.
+- The example configs include a `ble_client` switch so you can intentionally disconnect ESPHome before using the Android app, then reconnect it afterward.
+- OTA and Wi-Fi provisioning are out of scope for this project and will not be added.
 
 ## Features
 
