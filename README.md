@@ -1,6 +1,6 @@
 # Velit ESPHome External Component
 
-ESPHome external component for controlling Velit air conditioners and heaters over BLE using the same protocol found in Velit's Android app.
+ESPHome external component for controlling Velit air conditioners and heaters over BLE using the same protocol found in Velit's Android app. This was vibe coded and exists as is. Use at your own risk.
 
 ## Features
 
