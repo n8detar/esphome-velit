@@ -1,0 +1,50 @@
+esphome:
+  name: velit-ac-example
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+
+esp32_ble_tracker:
+
+ble_client:
+  - mac_address: 00:11:22:33:44:55
+    id: velit_ac_ble
+
+velit:
+  - id: velit_ac
+    ble_client_id: velit_ac_ble
+    device_type: ac
+
+climate:
+  - platform: velit
+    velit_id: velit_ac
+    name: Velit AC
+
+sensor:
+  - platform: velit
+    velit_id: velit_ac
+    ambient_temperature:
+      name: Velit AC Ambient Temperature
+    fault_code:
+      name: Velit AC Fault Code
+
+text_sensor:
+  - platform: velit
+    velit_id: velit_ac
+    fault_text:
+      name: Velit AC Fault Text
+
+switch:
+  - platform: velit
+    velit_id: velit_ac
+    swing:
+      name: Velit AC Swing

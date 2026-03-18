@@ -1,0 +1,58 @@
+esphome:
+  name: velit-heater-example
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+
+esp32_ble_tracker:
+
+ble_client:
+  - mac_address: 00:11:22:33:44:55
+    id: velit_heater_ble
+
+velit:
+  - id: velit_heater
+    ble_client_id: velit_heater_ble
+    device_type: heater
+
+climate:
+  - platform: velit
+    velit_id: velit_heater
+    name: Velit Heater
+
+sensor:
+  - platform: velit
+    velit_id: velit_heater
+    ambient_temperature:
+      name: Velit Heater Ambient Temperature
+    fault_code:
+      name: Velit Heater Fault Code
+    altitude:
+      name: Velit Heater Altitude
+
+text_sensor:
+  - platform: velit
+    velit_id: velit_heater
+    fault_text:
+      name: Velit Heater Fault Text
+
+select:
+  - platform: velit
+    velit_id: velit_heater
+    operating_mode:
+      name: Velit Heater Operating Mode
+
+number:
+  - platform: velit
+    velit_id: velit_heater
+    manual_fan_speed:
+      name: Velit Heater Manual Fan Speed
