@@ -44,6 +44,9 @@ text_sensor:
       name: Velit AC Fault Text
 
 switch:
+  - platform: ble_client
+    ble_client_id: velit_ac_ble
+    name: Velit AC BLE Connection
   - platform: velit
     velit_id: velit_ac
     swing:

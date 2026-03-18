@@ -45,6 +45,11 @@ text_sensor:
     fault_text:
       name: Velit Heater Fault Text
 
+switch:
+  - platform: ble_client
+    ble_client_id: velit_heater_ble
+    name: Velit Heater BLE Connection
+
 select:
   - platform: velit
     velit_id: velit_heater
