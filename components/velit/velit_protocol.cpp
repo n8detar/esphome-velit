@@ -149,11 +149,20 @@ bool parse_ac_notification(const uint8_t *value, uint16_t length, VelitState &st
 bool parse_heater_notification(
     const uint8_t *value, uint16_t length, VelitState &state
 ) {
-  if (length < 14 || value[0] != 0x55) {
+  if (length < 14) {
     return false;
   }
 
-  if (length == 22) {
+  // Heater responses use an 0xAA header and include the "SF" marker at bytes 10-11.
+  // Some control acknowledgements may still echo 0x55, so accept either start byte.
+  if ((value[0] != 0x55 && value[0] != 0xAA) || value[9] != 0x2D ||
+      value[10] != 0x53 || value[11] != 0x46) {
+    return false;
+  }
+
+  const auto command = value[12];
+
+  if (length == 22 && command == 0x0A) {
     state.fault_code = value[13];
     state.heater_operating_mode =
         value[14] == 0x01 ? HEATER_OPERATING_MODE_MANUAL
@@ -168,7 +177,7 @@ bool parse_heater_notification(
     return true;
   }
 
-  if (length == 28) {
+  if (length == 28 && command == 0x0B) {
     state.fault_code = value[13];
     const auto ambient_temp_f = read_be_u16(value, 18, length);
     if (ambient_temp_f <= 700) {
@@ -180,7 +189,7 @@ bool parse_heater_notification(
     return true;
   }
 
-  if (length == 20 && value[12] == 0x0F) {
+  if (length == 20 && command == 0x0F) {
     return true;
   }
 
