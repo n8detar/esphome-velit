@@ -37,7 +37,10 @@ class VelitHub : public ble_client::BLEClientNode, public PollingComponent {
 
   void register_child(VelitClient *child);
 
-  void set_device_type(VelitDeviceType type) { this->device_type_ = type; }
+  void set_device_type(VelitDeviceType type) {
+    this->device_type_ = type;
+    this->set_update_interval(type == DEVICE_TYPE_AC ? 6000 : 1000);
+  }
   VelitDeviceType get_device_type() const { return this->device_type_; }
   const VelitState &state() const { return this->state_; }
 

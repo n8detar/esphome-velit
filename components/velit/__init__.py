@@ -51,7 +51,3 @@ async def to_code(config):
     await cg.register_component(var, config)
     await ble_client.register_ble_node(var, config)
     cg.add(var.set_device_type(config[CONF_DEVICE_TYPE]))
-    if config[CONF_DEVICE_TYPE] == VelitDeviceType.DEVICE_TYPE_AC:
-        cg.add(var.set_update_interval(6000))
-    else:
-        cg.add(var.set_update_interval(1000))
