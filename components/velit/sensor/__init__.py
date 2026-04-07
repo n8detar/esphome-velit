@@ -2,6 +2,7 @@ import esphome.codegen as cg
 from esphome.components import sensor
 import esphome.config_validation as cv
 from esphome.const import (
+    DEVICE_CLASS_DISTANCE,
     DEVICE_CLASS_TEMPERATURE,
     ENTITY_CATEGORY_DIAGNOSTIC,
     STATE_CLASS_MEASUREMENT,
@@ -42,6 +43,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ALTITUDE): sensor.sensor_schema(
                 VelitSensor,
                 unit_of_measurement=UNIT_METER,
+                device_class=DEVICE_CLASS_DISTANCE,
                 accuracy_decimals=0,
                 state_class=STATE_CLASS_MEASUREMENT,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
