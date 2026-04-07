@@ -23,7 +23,7 @@ void VelitSensor::on_velit_state(const VelitState &state) {
       this->publish_state(state.fault_code);
       break;
     case SENSOR_KIND_ALTITUDE:
-      this->publish_state(state.altitude_valid ? state.altitude_m : NAN);
+      this->publish_state(state.altitude_valid ? state.altitude_ft : NAN);
       break;
   }
 }

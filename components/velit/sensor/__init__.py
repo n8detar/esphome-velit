@@ -7,7 +7,6 @@ from esphome.const import (
     ENTITY_CATEGORY_DIAGNOSTIC,
     STATE_CLASS_MEASUREMENT,
     UNIT_CELSIUS,
-    UNIT_METER,
 )
 
 from .. import VelitClient, VelitHub, register_velit_child, velit_ns
@@ -42,7 +41,7 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_ALTITUDE): sensor.sensor_schema(
                 VelitSensor,
-                unit_of_measurement=UNIT_METER,
+                unit_of_measurement="ft",
                 device_class=DEVICE_CLASS_DISTANCE,
                 accuracy_decimals=0,
                 state_class=STATE_CLASS_MEASUREMENT,

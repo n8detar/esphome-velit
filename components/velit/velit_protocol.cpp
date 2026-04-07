@@ -184,7 +184,7 @@ bool parse_heater_notification(
       state.current_temperature_c =
           fahrenheit_to_celsius(static_cast<float>(ambient_temp_f) - 60.0f);
     }
-    state.altitude_m = read_be_u16(value, 24, length);
+    state.altitude_ft = read_be_u16(value, 24, length);
     state.altitude_valid = true;
     return true;
   }

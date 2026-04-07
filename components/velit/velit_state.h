@@ -26,7 +26,7 @@ struct VelitState {
   uint8_t ac_mode_code{0};
   HeaterOperatingMode heater_operating_mode{HEATER_OPERATING_MODE_THERMOSTAT};
   uint8_t heater_other_state{0};
-  int altitude_m{0};
+  int altitude_ft{0};
   bool altitude_valid{false};
 };
 
