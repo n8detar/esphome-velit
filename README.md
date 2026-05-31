@@ -1,375 +1,195 @@
-#include "velit_hub.h"
+# MaxxAir Fan ESPHome External Component
 
-#ifdef USE_ESP32
+ESPHome external component for controlling IR-equipped MaxxAir fans (7000K/7500K series) from Home Assistant. It adds a `maxxair_fan:` IR hub plus fan, switch, cover, and sensor entities with full state-machine logic matching the physical remote.
 
-#include <algorithm>
-#include <cmath>
-#include <ctime>
+## Important Notes
 
-#include "esphome/core/log.h"
-#include "esphome/core/helpers.h"
+- This is an unofficial project provided as-is. Use at your own risk.
+- IR control is one-way. ESPHome cannot read the physical state of the fan — if someone presses the buttons on the fan itself, Home Assistant will be out of sync until the next command is sent from HA.
+- ESPHome ≥ 2025.7.0 is required for sub-device support. The example config will still compile on older versions if you remove the `devices:` block and all `device_id:` lines.
+- The IR LED must have a clear line-of-sight to the MaxxAir IR receiver window, or be routed directly into the fan housing.
 
-namespace esphome::velit {
+## Features
 
-static const char *const TAG = "velit";
+- `maxxair_fan:` IR hub bound to a `remote_transmitter`
+- Encodes the MaxxAir IR protocol at runtime — no hardcoded raw IR blobs
+  - 16-byte RS232-framed packet at 38 kHz / 800 µs per bit
+  - Checksum-protected, templatable parameters
+- Fan entity
+  - 10 speeds
+  - Forward (exhaust / air out) and reverse (intake / air in)
+- Switch entities
+  - `Ceiling Fan Mode` — lid-closed downflow mode, sets the `special` protocol flag
+  - `Auto Fan` — state flag for use with Home Assistant automation blueprints
+- Cover entity
+  - `Lid` — open or close the fan lid passively when the fan is off
+- Diagnostic sensors
+  - WiFi signal dBm
+  - WiFi signal percent
+- Sub-device grouping — all entities appear as one logical device in Home Assistant
+- Multi-fan support — run multiple `maxxair_fan:` instances with separate transmitter GPIOs
 
-namespace {
+## Installation
 
-uint8_t clamp_ac_temperature(float temperature_c) {
-  return static_cast<uint8_t>(std::lround(std::clamp(temperature_c, 16.0f, 30.0f)));
-}
+### From GitHub
 
-uint8_t clamp_heater_temperature(float temperature_c) {
-  return static_cast<uint8_t>(std::lround(std::clamp(temperature_c, 4.0f, 38.0f)));
-}
+```yaml
+external_components:
+  - source:
+      type: git
+      url: https://github.com/n8detar/esphome-maxxair-fan
+    components: [ maxxair_fan ]
+```
 
-uint8_t clamp_fan_speed(uint8_t fan_speed) {
-  return std::clamp<uint8_t>(fan_speed, 1, 5);
-}
+### From a local checkout
 
-uint8_t heater_mode_to_code(HeaterOperatingMode mode) {
-  return mode == HEATER_OPERATING_MODE_MANUAL ? 0x01 : 0x02;
-}
+```yaml
+external_components:
+  - source:
+      type: local
+      path: /config/esphome/esphome-maxxair-fan/components
+```
 
-}  // namespace
+## Hardware
 
-void VelitHub::setup() {
-  this->state_ = {};
-}
+| Part | Notes |
+| --- | --- |
+| ESP8266 (Wemos D1 Mini) or ESP32 | Update pin assignments to match your board |
+| IR LED (940 nm) | e.g. TSAL6100 or similar |
+| 220 Ω resistor | Series current limiter for the LED |
+| 5 V power supply | A 12 V → 5 V buck converter works well in vans/RVs |
 
-void VelitHub::dump_config() {
-  ESP_LOGCONFIG(TAG, "Velit Hub");
-  ESP_LOGCONFIG(TAG, "  Device Type: %s", this->device_type_ == DEVICE_TYPE_AC ? "AC" : "Heater");
-  ESP_LOGCONFIG(TAG, "  Address: %s", this->parent_->address_str());
-  LOG_UPDATE_INTERVAL(this);
-}
+```
+3.3 V ──[220 Ω]──┤►├── GPIO (ir_led_pin)
+```
 
-void VelitHub::register_child(VelitClient *child) {
-  this->children_.push_back(child);
-}
+## Single Fan Example
 
-uint32_t VelitHub::tx_gap_ms_() const {
-  return this->device_type_ == DEVICE_TYPE_AC ? 300 : 100;
-}
+```yaml
+esp8266:
+  board: d1_mini
 
-uint32_t VelitHub::refresh_delay_ms_() const {
-  return this->device_type_ == DEVICE_TYPE_AC ? 1000 : 4000;
-}
+remote_transmitter:
+  - id: ir_tx
+    pin: D6
+    carrier_duty_percent: 50%
 
-void VelitHub::clear_queues_() {
-  this->user_queue_.clear();
-  this->poll_queue_.clear();
-  this->next_tx_at_ = 0;
-  this->pending_refresh_at_ = 0;
-  this->refresh_pending_ = false;
-}
+maxxair_fan:
+  - id: maxxair
+    transmitter_id: ir_tx
 
-void VelitHub::dispatch_state_() {
-  for (auto *child : this->children_) {
-    child->on_velit_state(this->state_);
-  }
-}
+fan:
+  - platform: speed
+    id: maxxair_fan_id
+    name: Fan
+    speed_count: 10
+    output: fan_speed_output
+    direction_output: fan_direction_output
+    device_id: maxxair_device
 
-bool VelitHub::discover_characteristics_() {
-  auto *notify_chr = this->parent_->get_characteristic(VELIT_SERVICE_UUID, VELIT_NOTIFY_UUID);
-  if (notify_chr == nullptr) {
-    ESP_LOGW(TAG, "[%s] Notify characteristic not found", this->parent_->address_str());
-    return false;
-  }
+switch:
+  - platform: template
+    id: ceiling_fan_mode
+    name: Ceiling Fan Mode
+    icon: mdi:ceiling-fan
+    optimistic: true
+    device_id: maxxair_device
+    on_turn_on:
+      - lambda: id(maxxair).send_ceiling(id(maxxair_fan_id).speed);
+    on_turn_off:
+      - lambda: id(maxxair).send_intake(id(maxxair_fan_id).speed);
 
-  auto *write_chr = this->parent_->get_characteristic(VELIT_SERVICE_UUID, VELIT_WRITE_UUID);
-  if (write_chr == nullptr) {
-    ESP_LOGW(TAG, "[%s] Write characteristic not found", this->parent_->address_str());
-    return false;
-  }
+  - platform: template
+    id: auto_fan
+    name: Auto Fan
+    icon: mdi:fan-auto
+    optimistic: true
+    device_id: maxxair_device
 
-  this->notify_char_handle_ = notify_chr->handle;
-  this->write_char_handle_ = write_chr->handle;
+cover:
+  - platform: template
+    id: maxxair_lid
+    name: Lid
+    optimistic: true
+    device_id: maxxair_device
+    on_open:
+      - lambda: id(maxxair).send_lid_open();
+    on_closed:
+      - lambda: id(maxxair).send_lid_close();
+```
 
-  auto status = esp_ble_gattc_register_for_notify(
-      this->parent_->get_gattc_if(),
-      this->parent_->get_remote_bda(),
-      this->notify_char_handle_
-  );
-  if (status != ESP_OK) {
-    ESP_LOGW(TAG, "[%s] Failed to register for notify, status=%d", this->parent_->address_str(), status);
-    return false;
-  }
+See [`examples/maxxair-fan-example.yaml`](examples/maxxair-fan-example.yaml) for a complete configuration with the full fan state machine, sub-device grouping, WiFi diagnostics, secrets, OTA, and API.
 
-  return true;
-}
+## Two Fans from One ESP
 
-bool VelitHub::write_frame_(const std::vector<uint8_t> &frame) {
-  if (this->node_state != espbt::ClientState::ESTABLISHED || this->write_char_handle_ == 0) {
-    return false;
-  }
+```yaml
+esphome:
+  devices:
+    - id: fan_front
+      name: Front MaxxAir
+    - id: fan_rear
+      name: Rear MaxxAir
 
-  ESP_LOGD(TAG, "[%s] TX: %s", this->parent_->address_str(), format_hex_pretty(frame).c_str());
+remote_transmitter:
+  - id: ir_tx_front
+    pin: D5
+    carrier_duty_percent: 50%
+  - id: ir_tx_rear
+    pin: D6
+    carrier_duty_percent: 50%
 
-  auto status = esp_ble_gattc_write_char(
-      this->parent_->get_gattc_if(),
-      this->parent_->get_conn_id(),
-      this->write_char_handle_,
-      static_cast<uint16_t>(frame.size()),
-      const_cast<uint8_t *>(frame.data()),
-      ESP_GATT_WRITE_TYPE_NO_RSP,
-      ESP_GATT_AUTH_REQ_NONE
-  );
-  if (status != ESP_OK) {
-    ESP_LOGW(TAG, "[%s] Failed writing frame, status=%d", this->parent_->address_str(), status);
-    return false;
-  }
+maxxair_fan:
+  - id: maxxair_front
+    transmitter_id: ir_tx_front
+  - id: maxxair_rear
+    transmitter_id: ir_tx_rear
+```
 
-  return true;
-}
+Then reference `id(maxxair_front)` or `id(maxxair_rear)` in lambdas as needed.
 
-void VelitHub::enqueue_user_frame_(std::vector<uint8_t> frame) {
-  this->user_queue_.push_back({std::move(frame)});
-}
+## Component API
 
-void VelitHub::schedule_refresh_(uint32_t delay_ms) {
-  this->pending_refresh_at_ = millis() + delay_ms;
-  this->refresh_pending_ = true;
-}
+Available methods for use inside `lambda:` actions:
 
-void VelitHub::replace_poll_queue_(const std::vector<std::vector<uint8_t>> &frames) {
-  this->poll_queue_.clear();
-  for (const auto &frame : frames) {
-    this->poll_queue_.push_back({frame});
-  }
-}
+```cpp
+// High-level helpers — speed is 1–10
+id(maxxair).send_exhaust(speed);   // Air OUT, lid open
+id(maxxair).send_intake(speed);    // Air IN, lid open
+id(maxxair).send_ceiling(speed);   // Lid closed, air down, special flag set
+id(maxxair).send_lid_open();       // Fan off, lid open (passive ventilation)
+id(maxxair).send_lid_close();      // Fan off, lid closed
 
-void VelitHub::queue_full_sync_() {
-  if (this->device_type_ == DEVICE_TYPE_AC) {
-    this->replace_poll_queue_({
-        build_ac_command(0x01, 0x00),
-        build_ac_command(0x02, 0x00),
-        build_ac_command(0x03, 0x00),
-        build_ac_command(0x04, 0x00),
-        build_ac_command(0x07, 0x00),
-        build_ac_command(0x10, 0x00),
-        build_ac_command(0x0B, 0x00),
-    });
-  } else {
-    this->replace_poll_queue_({
-        build_heater_short_command(0x0A, 0x00),
-        build_heater_short_command(0x0B, 0x00),
-        build_heater_short_command(0x0F, 0x00),
-    });
-  }
-}
+// Full control — speed_pct is 0–100
+id(maxxair).send(fan_on, fan_exhaust, cover_open, speed_pct,
+                 auto_mode, auto_temperature, special, warn);
 
-void VelitHub::queue_connect_sync_() {
-  this->clear_queues_();
+// Example: thermostat auto-mode at 75 °F, intake, speed 50 %
+id(maxxair).send(true, false, true, 50, true, 75);
+```
 
-  if (this->device_type_ == DEVICE_TYPE_HEATER) {
-    std::time_t now = std::time(nullptr);
-    if (now > 1577836800) {
-      std::tm time_info{};
-      localtime_r(&now, &time_info);
-      this->enqueue_user_frame_(build_heater_clock_sync_command(
-          (time_info.tm_year + 1900) % 100,
-          time_info.tm_mon + 1,
-          time_info.tm_mday,
-          time_info.tm_hour,
-          time_info.tm_min,
-          time_info.tm_sec
-      ));
-    } else {
-      ESP_LOGW(TAG, "Skipping heater clock sync because system time is unavailable");
-    }
-  }
+## Auto Fan Blueprint
 
-  this->queue_full_sync_();
-}
+The [Smarty Van Auto Fan Blueprint](https://github.com/SmartyVan/MaxxAir-Fan-ESPHome/blob/main/smarty_van_autofan_blueprint.yaml) works directly with the `Auto Fan` switch. Import it into Home Assistant, select the switch, and configure temperature thresholds and speed range.
 
-void VelitHub::handle_notification_(const uint8_t *value, uint16_t length) {
-  std::vector<uint8_t> payload(value, value + length);
-  ESP_LOGD(TAG, "[%s] RX: %s", this->parent_->address_str(), format_hex_pretty(payload).c_str());
+## Control Logic
 
-  bool handled = false;
-  if (this->device_type_ == DEVICE_TYPE_AC) {
-    handled = parse_ac_notification(value, length, this->state_);
-  } else {
-    handled = parse_heater_notification(value, length, this->state_);
-  }
+| Action | Result |
+| --- | --- |
+| Fan FORWARD | Air OUT (exhaust), lid open |
+| Fan REVERSE | Air IN (intake), lid open |
+| Ceiling Fan Mode on | Forces REVERSE, closes lid, sets `special` flag |
+| Ceiling Fan Mode off (fan on) | Opens lid, fan continues as REVERSE |
+| Fan turns off | Clears Ceiling Fan Mode and Auto Fan |
+| Lid OPEN (fan off) | Passive ventilation command |
+| Lid CLOSE (fan on) | Engages Ceiling Fan Mode |
 
-  if (handled) {
-    this->dispatch_state_();
-  } else {
-    ESP_LOGW(TAG, "[%s] Unhandled notification len=%u", this->parent_->address_str(), length);
-  }
-}
+## Known Limitations
 
-void VelitHub::update() {
-  if (this->node_state != espbt::ClientState::ESTABLISHED) {
-    return;
-  }
-  this->queue_full_sync_();
-}
+- IR is send-only. Physical button presses on the fan are not detected and will desync Home Assistant state.
+- Auto mode temperature setpoint is sent with every command but the fan's built-in thermostat logic is separate from the `Auto Fan` switch, which is only a flag for use in HA automations.
+- The `warn` (beep) flag is not exposed in the default example config.
 
-void VelitHub::loop() {
-  if (this->node_state != espbt::ClientState::ESTABLISHED) {
-    return;
-  }
+## Credits
 
-  const auto now = millis();
-
-  if (this->refresh_pending_ && this->user_queue_.empty() && now >= this->pending_refresh_at_) {
-    this->refresh_pending_ = false;
-    this->queue_full_sync_();
-  }
-
-  if (now < this->next_tx_at_) {
-    return;
-  }
-
-  if (!this->user_queue_.empty()) {
-    const auto frame = this->user_queue_.front().data;
-    this->user_queue_.pop_front();
-    if (this->write_frame_(frame)) {
-      this->next_tx_at_ = now + this->tx_gap_ms_();
-    }
-    return;
-  }
-
-  if (!this->poll_queue_.empty()) {
-    const auto frame = this->poll_queue_.front().data;
-    this->poll_queue_.pop_front();
-    if (this->write_frame_(frame)) {
-      this->next_tx_at_ = now + this->tx_gap_ms_();
-    }
-  }
-}
-
-void VelitHub::gattc_event_handler(
-    esp_gattc_cb_event_t event,
-    esp_gatt_if_t gattc_if,
-    esp_ble_gattc_cb_param_t *param
-) {
-  switch (event) {
-    case ESP_GATTC_DISCONNECT_EVT:
-      this->state_.connected = false;
-      this->write_char_handle_ = 0;
-      this->notify_char_handle_ = 0;
-      this->clear_queues_();
-      this->status_set_warning();
-      this->dispatch_state_();
-      break;
-    case ESP_GATTC_SEARCH_CMPL_EVT:
-      if (!this->discover_characteristics_()) {
-        this->status_set_warning();
-      }
-      break;
-    case ESP_GATTC_REG_FOR_NOTIFY_EVT:
-      if (param->reg_for_notify.handle == this->notify_char_handle_ &&
-          param->reg_for_notify.status == ESP_GATT_OK) {
-        this->node_state = espbt::ClientState::ESTABLISHED;
-        this->state_.connected = true;
-        this->status_clear_warning();
-        this->dispatch_state_();
-        this->queue_connect_sync_();
-      }
-      break;
-    case ESP_GATTC_NOTIFY_EVT:
-      if (param->notify.handle == this->notify_char_handle_) {
-        this->handle_notification_(param->notify.value, param->notify.value_len);
-      }
-      break;
-    default:
-      break;
-  }
-}
-
-bool VelitHub::set_ac_power(bool on) {
-  if (this->device_type_ != DEVICE_TYPE_AC) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_ac_command(0x01, on ? 0x02 : 0x01));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_ac_mode(uint8_t mode_code) {
-  if (this->device_type_ != DEVICE_TYPE_AC) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_ac_command(0x02, mode_code));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_ac_target_temperature(float temperature_c) {
-  if (this->device_type_ != DEVICE_TYPE_AC) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_ac_command(0x03, clamp_ac_temperature(temperature_c)));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_ac_fan_speed(uint8_t fan_speed) {
-  if (this->device_type_ != DEVICE_TYPE_AC) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_ac_command(0x04, clamp_fan_speed(fan_speed)));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_ac_swing(bool on) {
-  if (this->device_type_ != DEVICE_TYPE_AC) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_ac_command(0x10, on ? 0x01 : 0x02));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_heater_power(bool on) {
-  if (this->device_type_ != DEVICE_TYPE_HEATER) {
-    return false;
-  }
-  if (on) {
-    this->enqueue_user_frame_(build_heater_short_command(
-        0x01, heater_mode_to_code(this->state_.heater_operating_mode)
-    ));
-  } else {
-    this->enqueue_user_frame_(build_heater_short_command(0x02, 0x00));
-  }
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_heater_operating_mode(HeaterOperatingMode mode) {
-  if (this->device_type_ != DEVICE_TYPE_HEATER) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_heater_short_command(0x00, heater_mode_to_code(mode)));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_heater_target_temperature(float temperature_c) {
-  if (this->device_type_ != DEVICE_TYPE_HEATER) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_heater_short_command(
-      0x08, clamp_heater_temperature(temperature_c)
-  ));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-bool VelitHub::set_heater_manual_fan_speed(uint8_t fan_speed) {
-  if (this->device_type_ != DEVICE_TYPE_HEATER) {
-    return false;
-  }
-  this->enqueue_user_frame_(build_heater_short_command(0x07, clamp_fan_speed(fan_speed)));
-  this->schedule_refresh_(this->refresh_delay_ms_());
-  return true;
-}
-
-}  // namespace esphome::velit
-
-#endif
+- IR protocol reverse-engineered by [skypeachblue](https://github.com/skypeachblue), [wingspinner](https://github.com/wingspinner), and [Jeff Brown](https://github.com/brown-studios/esphome-maxxfan-protocol)
+- Fan state machine and entity structure based on work by [Mike Goubeaux @ Smarty Van](https://www.youtube.com/@SmartyVan)
