@@ -1,0 +1,26 @@
+Personal Use License (Non-Commercial)
+
+Copyright © 2025 — ESPHome component packaging
+
+IR codes and control logic originally captured and published by
+Mike Goubeaux @ Smarty Van (https://www.youtube.com/@SmartyVan).
+ESPHome external component packaging by contributors to this repository.
+
+Permission is hereby granted to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to use the Software
+solely for personal, non-commercial purposes.
+
+Restrictions:
+- The Software may not be used, distributed, or sold for commercial purposes
+  without prior written permission from the copyright holder.
+- Modification for personal use is allowed, but modified versions may not be
+  distributed commercially.
+- Attribution to the original author (Mike Goubeaux @ Smarty Van) must be
+  retained in any copy or modification of the Software.
+
+Disclaimer:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
