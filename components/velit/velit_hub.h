@@ -19,7 +19,9 @@ namespace esphome::velit {
 
 namespace espbt = esphome::esp32_ble_tracker;
 
-class VelitHub : public ble_client::BLEClientNode, public PollingComponent {
+class VelitHub : public ble_client::BLEClientNode,
+                 public PollingComponent,
+                 public espbt::ESPBTDeviceListener {
  public:
   VelitHub() = default;
 
@@ -34,6 +36,9 @@ class VelitHub : public ble_client::BLEClientNode, public PollingComponent {
       esp_gatt_if_t gattc_if,
       esp_ble_gattc_cb_param_t *param
   ) override;
+#ifdef USE_ESP32_BLE_DEVICE
+  bool parse_device(const espbt::ESPBTDevice &device) override;
+#endif
 
   void register_child(VelitClient *child);
 

@@ -195,6 +195,10 @@ Full local validation examples are available in [`examples/ac.yaml`](examples/ac
 
 Normal builds log component configuration and actionable BLE connection warnings. Raw BLE packet TX/RX logging is intentionally disabled for release use so routine ESPHome logs stay readable.
 
+When BLE scans see likely Velit advertisements, the component logs the candidate MAC address once per boot. Candidates are matched by the known `FFE0` Velit BLE service UUID or by app-derived advertised-name markers such as `VELIT`, `VLIT`, and `D30`. This is only a helper for finding the MAC address; binding is still fixed through `ble_client.mac_address`.
+
+If you do not know the MAC address yet, use a temporary placeholder such as `00:11:22:33:44:55`, install the example, watch the ESPHome logs for the `INFO` line `Discovered possible Velit BLE device ...`, then replace the placeholder with the logged MAC.
+
 ## Known Limitations
 
 - ESP32 only.
@@ -206,5 +210,4 @@ Normal builds log component configuration and actionable BLE connection warnings
 
 ## To Do
 
-- Future release: if technically possible, log discovered Velit BLE MAC addresses during BLE scans so users can identify the correct device to bind with a fixed `ble_client` MAC.
 - Future release: if the protocol mapping is reliable enough, expose AC vendor submodes such as `sleep`, `eco`, `auto`, `turbo`, and `vent` as climate presets.

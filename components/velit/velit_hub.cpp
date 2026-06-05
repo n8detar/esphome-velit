@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <ctime>
+#include <string>
 
 #include "esphome/core/log.h"
 
@@ -30,6 +32,52 @@ uint8_t heater_mode_to_code(HeaterOperatingMode mode) {
   return mode == HEATER_OPERATING_MODE_MANUAL ? 0x01 : 0x02;
 }
 
+std::string uppercase_copy(const std::string &value) {
+  std::string upper = value;
+  std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char chr) {
+    return static_cast<char>(std::toupper(chr));
+  });
+  return upper;
+}
+
+bool is_velit_name_(const std::string &name) {
+  const auto upper_name = uppercase_copy(name);
+  return upper_name.find("VELIT") != std::string::npos ||
+         upper_name.find("VLIT") != std::string::npos ||
+         upper_name.find("D30") != std::string::npos;
+}
+
+#ifdef USE_ESP32_BLE_DEVICE
+std::vector<uint64_t> logged_discovery_addresses;
+
+bool advertises_velit_service_(const espbt::ESPBTDevice &device) {
+  const auto velit_uuid = esp32_ble::ESPBTUUID::from_uint16(VELIT_SERVICE_UUID);
+
+  for (const auto &uuid : device.get_service_uuids()) {
+    if (uuid == velit_uuid) {
+      return true;
+    }
+  }
+
+  for (const auto &service_data : device.get_service_datas()) {
+    if (service_data.uuid == velit_uuid) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool should_log_discovery_address_(uint64_t address) {
+  if (std::find(logged_discovery_addresses.begin(), logged_discovery_addresses.end(), address) !=
+      logged_discovery_addresses.end()) {
+    return false;
+  }
+  logged_discovery_addresses.push_back(address);
+  return true;
+}
+#endif
+
 }  // namespace
 
 void VelitHub::setup() {
@@ -39,13 +87,40 @@ void VelitHub::setup() {
 void VelitHub::dump_config() {
   ESP_LOGCONFIG(TAG, "Velit Hub");
   ESP_LOGCONFIG(TAG, "  Device Type: %s", this->device_type_ == DEVICE_TYPE_AC ? "AC" : "Heater");
-  ESP_LOGCONFIG(TAG, "  Address: %s", this->parent_->address_str());
+  ESP_LOGCONFIG(TAG, "  Address: %s", this->parent()->address_str());
   LOG_UPDATE_INTERVAL(this);
 }
 
 void VelitHub::register_child(VelitClient *child) {
   this->children_.push_back(child);
 }
+
+#ifdef USE_ESP32_BLE_DEVICE
+bool VelitHub::parse_device(const espbt::ESPBTDevice &device) {
+  const auto has_velit_service = advertises_velit_service_(device);
+  const auto has_velit_name = is_velit_name_(device.get_name());
+  if (!has_velit_service && !has_velit_name) {
+    return false;
+  }
+
+  const auto address = device.address_uint64();
+  if (!should_log_discovery_address_(address)) {
+    return false;
+  }
+
+  const auto reason = has_velit_service ? "advertised FFE0 service" : "matching advertised name";
+  if (device.get_name().empty()) {
+    ESP_LOGI(TAG, "Discovered possible Velit BLE device %s RSSI=%d (%s). Use this MAC in ble_client.mac_address.",
+             device.address_str().c_str(), device.get_rssi(), reason);
+  } else {
+    ESP_LOGI(TAG,
+             "Discovered possible Velit BLE device %s RSSI=%d name='%s' (%s). Use this MAC in ble_client.mac_address.",
+             device.address_str().c_str(), device.get_rssi(), device.get_name().c_str(), reason);
+  }
+
+  return false;
+}
+#endif
 
 uint32_t VelitHub::tx_gap_ms_() const {
   return this->device_type_ == DEVICE_TYPE_AC ? 300 : 100;
@@ -70,15 +145,15 @@ void VelitHub::dispatch_state_() {
 }
 
 bool VelitHub::discover_characteristics_() {
-  auto *notify_chr = this->parent_->get_characteristic(VELIT_SERVICE_UUID, VELIT_NOTIFY_UUID);
+  auto *notify_chr = this->parent()->get_characteristic(VELIT_SERVICE_UUID, VELIT_NOTIFY_UUID);
   if (notify_chr == nullptr) {
-    ESP_LOGW(TAG, "[%s] Notify characteristic not found", this->parent_->address_str());
+    ESP_LOGW(TAG, "[%s] Notify characteristic not found", this->parent()->address_str());
     return false;
   }
 
-  auto *write_chr = this->parent_->get_characteristic(VELIT_SERVICE_UUID, VELIT_WRITE_UUID);
+  auto *write_chr = this->parent()->get_characteristic(VELIT_SERVICE_UUID, VELIT_WRITE_UUID);
   if (write_chr == nullptr) {
-    ESP_LOGW(TAG, "[%s] Write characteristic not found", this->parent_->address_str());
+    ESP_LOGW(TAG, "[%s] Write characteristic not found", this->parent()->address_str());
     return false;
   }
 
@@ -86,12 +161,12 @@ bool VelitHub::discover_characteristics_() {
   this->write_char_handle_ = write_chr->handle;
 
   auto status = esp_ble_gattc_register_for_notify(
-      this->parent_->get_gattc_if(),
-      this->parent_->get_remote_bda(),
+      this->parent()->get_gattc_if(),
+      this->parent()->get_remote_bda(),
       this->notify_char_handle_
   );
   if (status != ESP_OK) {
-    ESP_LOGW(TAG, "[%s] Failed to register for notify, status=%d", this->parent_->address_str(), status);
+    ESP_LOGW(TAG, "[%s] Failed to register for notify, status=%d", this->parent()->address_str(), status);
     return false;
   }
 
@@ -104,8 +179,8 @@ bool VelitHub::write_frame_(const std::vector<uint8_t> &frame) {
   }
 
   auto status = esp_ble_gattc_write_char(
-      this->parent_->get_gattc_if(),
-      this->parent_->get_conn_id(),
+      this->parent()->get_gattc_if(),
+      this->parent()->get_conn_id(),
       this->write_char_handle_,
       static_cast<uint16_t>(frame.size()),
       const_cast<uint8_t *>(frame.data()),
@@ -113,7 +188,7 @@ bool VelitHub::write_frame_(const std::vector<uint8_t> &frame) {
       ESP_GATT_AUTH_REQ_NONE
   );
   if (status != ESP_OK) {
-    ESP_LOGW(TAG, "[%s] Failed writing frame, status=%d", this->parent_->address_str(), status);
+    ESP_LOGW(TAG, "[%s] Failed writing frame, status=%d", this->parent()->address_str(), status);
     return false;
   }
 
@@ -191,7 +266,7 @@ void VelitHub::handle_notification_(const uint8_t *value, uint16_t length) {
   if (handled) {
     this->dispatch_state_();
   } else {
-    ESP_LOGW(TAG, "[%s] Unhandled notification len=%u", this->parent_->address_str(), length);
+    ESP_LOGW(TAG, "[%s] Unhandled notification len=%u", this->parent()->address_str(), length);
   }
 }
 
