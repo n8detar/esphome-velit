@@ -7,7 +7,6 @@
 #include <ctime>
 
 #include "esphome/core/log.h"
-#include "esphome/core/helpers.h"
 
 namespace esphome::velit {
 
@@ -104,8 +103,6 @@ bool VelitHub::write_frame_(const std::vector<uint8_t> &frame) {
     return false;
   }
 
-  ESP_LOGD(TAG, "[%s] TX: %s", this->parent_->address_str(), format_hex_pretty(frame).c_str());
-
   auto status = esp_ble_gattc_write_char(
       this->parent_->get_gattc_if(),
       this->parent_->get_conn_id(),
@@ -176,7 +173,7 @@ void VelitHub::queue_connect_sync_() {
           time_info.tm_sec
       ));
     } else {
-      ESP_LOGW(TAG, "Skipping heater clock sync because system time is unavailable");
+      ESP_LOGV(TAG, "Skipping heater clock sync because system time is unavailable");
     }
   }
 
@@ -184,9 +181,6 @@ void VelitHub::queue_connect_sync_() {
 }
 
 void VelitHub::handle_notification_(const uint8_t *value, uint16_t length) {
-  std::vector<uint8_t> payload(value, value + length);
-  ESP_LOGD(TAG, "[%s] RX: %s", this->parent_->address_str(), format_hex_pretty(payload).c_str());
-
   bool handled = false;
   if (this->device_type_ == DEVICE_TYPE_AC) {
     handled = parse_ac_notification(value, length, this->state_);

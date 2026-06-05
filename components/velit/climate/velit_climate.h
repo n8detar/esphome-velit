@@ -11,6 +11,7 @@ namespace esphome::velit {
 
 class VelitClimate : public climate::Climate, public Component, public VelitClient {
  public:
+  void setup() override;
   void dump_config() override;
   climate::ClimateTraits traits() override;
   void on_velit_state(const VelitState &state) override;

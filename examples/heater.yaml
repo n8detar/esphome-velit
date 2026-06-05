@@ -1,5 +1,8 @@
 esphome:
   name: velit-heater-example
+  devices:
+    - id: velit_heater_device
+      name: Velit Heater
 
 esp32:
   board: esp32dev
@@ -28,36 +31,44 @@ climate:
   - platform: velit
     velit_id: velit_heater
     name: Velit Heater
+    device_id: velit_heater_device
 
 sensor:
   - platform: velit
     velit_id: velit_heater
     ambient_temperature:
       name: Velit Heater Ambient Temperature
+      device_id: velit_heater_device
     fault_code:
       name: Velit Heater Fault Code
+      device_id: velit_heater_device
     altitude:
       name: Velit Heater Altitude
+      device_id: velit_heater_device
 
 text_sensor:
   - platform: velit
     velit_id: velit_heater
     fault_text:
       name: Velit Heater Fault Text
+      device_id: velit_heater_device
 
 switch:
   - platform: ble_client
     ble_client_id: velit_heater_ble
     name: Velit Heater BLE Connection
+    device_id: velit_heater_device
 
 select:
   - platform: velit
     velit_id: velit_heater
     operating_mode:
       name: Velit Heater Operating Mode
+      device_id: velit_heater_device
 
 number:
   - platform: velit
     velit_id: velit_heater
     manual_fan_speed:
       name: Velit Heater Manual Fan Speed
+      device_id: velit_heater_device

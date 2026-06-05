@@ -13,6 +13,12 @@ static constexpr const char *AC_FAN_MODE_NAMES[] = {
     "Speed 1", "Speed 2", "Speed 3", "Speed 4", "Speed 5"
 };
 
+void VelitClimate::setup() {
+  if (this->parent_->get_device_type() == DEVICE_TYPE_AC) {
+    this->set_supported_custom_fan_modes(AC_FAN_MODE_NAMES);
+  }
+}
+
 void VelitClimate::dump_config() {
   LOG_CLIMATE("", "Velit Climate", this);
 }
@@ -28,7 +34,6 @@ climate::ClimateTraits VelitClimate::traits() {
         climate::CLIMATE_MODE_COOL,
         climate::CLIMATE_MODE_FAN_ONLY,
     });
-    traits.set_supported_custom_fan_modes(AC_FAN_MODE_NAMES);
     traits.set_visual_min_temperature(16.0f);
     traits.set_visual_max_temperature(30.0f);
   } else {

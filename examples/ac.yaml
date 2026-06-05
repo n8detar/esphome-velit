@@ -1,5 +1,8 @@
 esphome:
   name: velit-ac-example
+  devices:
+    - id: velit_ac_device
+      name: Velit AC
 
 esp32:
   board: esp32dev
@@ -28,26 +31,32 @@ climate:
   - platform: velit
     velit_id: velit_ac
     name: Velit AC
+    device_id: velit_ac_device
 
 sensor:
   - platform: velit
     velit_id: velit_ac
     ambient_temperature:
       name: Velit AC Ambient Temperature
+      device_id: velit_ac_device
     fault_code:
       name: Velit AC Fault Code
+      device_id: velit_ac_device
 
 text_sensor:
   - platform: velit
     velit_id: velit_ac
     fault_text:
       name: Velit AC Fault Text
+      device_id: velit_ac_device
 
 switch:
   - platform: ble_client
     ble_client_id: velit_ac_ble
     name: Velit AC BLE Connection
+    device_id: velit_ac_device
   - platform: velit
     velit_id: velit_ac
     swing:
       name: Velit AC Swing
+      device_id: velit_ac_device
